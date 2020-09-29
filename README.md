@@ -11,7 +11,8 @@ Code for our GCPR 20 Paper: Long-Tailed Recognition Using Class-Balanced Experts
 
 ## Setup
 1. Clone this repository.
-2. Download ImageNet and Places and update the path in utils.py/data_root
+2. Download the [ImageNet](http://image-net.org/download.php) and [Places](http://places2.csail.mit.edu/download.html) datasets, and update the path in utils.py/data_root.
+3. Download the ImageNet pretrained caffe model provided by Liu et al from [Google Drive](https://drive.google.com/uc?export=download&id=0B7fNdx_jAqhtckNGQ2FLd25fa3c) and place it in ./data/caffe_resnet152.pth
 
 ## Running the Code
 
@@ -45,8 +46,8 @@ python gen_logits.py --exp [places_logits] --dataset Places --load_model [path_t
 ```
 Train the joint calibration module:
 ```
-python jointCalibration.py --exp [imagenet_jointCalibration_exp] --dataset Imagenet
-python jointCalibration.py --exp [places_jointCalibration_exp] --dataset Places
+python jointCalibration.py --exp [imagenet_jointCalibration_exp] --logit_exp [imagenet_logits] --dataset Imagenet
+python jointCalibration.py --exp [places_jointCalibration_exp] --logit_exp [places_logits] --dataset Places
 ```
 Test the joint calibration module to generate four-fold accuracies on Many/Medium/Few/All splits:
 ```
