@@ -4,49 +4,49 @@ from utils import *
 
 class CalibrateExperts(nn.Module):
     
-    def __init__(self, dataset, manyshotClassMask, mediumshotClassMask, lowshotClassMask, *args):
+    def __init__(self, dataset, manyshotClassMask, mediumshotClassMask, fewshotClassMask, *args):
         super(CalibrateExperts, self).__init__()
         self.dataset = dataset
 
-        # ranges of manyshot, mediumshot and fewshot logits     # alternatively one could pass the three logits as three separate variables
+        # ranges of manyshot, mediumshot and fewshot logits
         if(dataset=='imagenet'):
             self.manyshotRange = (0, 392)
             self.mediumshotRange = (392, 866)
-            self.lowshotRange = (866, 1003)
+            self.fewshotRange = (866, 1003)
         else:
             self.manyshotRange = (0, 133)
             self.mediumshotRange = (133, 296)
-            self.lowshotRange = (296, 368)
+            self.fewshotRange = (296, 368)
 
         # learning temp per index
         self.manyshotTemp = nn.Parameter(torch.ones(1, self.manyshotRange[1] - self.manyshotRange[0])  )
         self.mediumshotTemp = nn.Parameter(torch.ones(1, self.mediumshotRange[1] - self.mediumshotRange[0]) )
-        self.lowshotTemp = nn.Parameter(torch.ones(1, self.lowshotRange[1] - self.lowshotRange[0]) )
+        self.fewshotTemp = nn.Parameter(torch.ones(1, self.fewshotRange[1] - self.fewshotRange[0]) )
         
         # learning bias per index
         self.manyshotBias = nn.Parameter(torch.ones(1, self.manyshotRange[1] - self.manyshotRange[0]))
         self.mediumshotBias = nn.Parameter(torch.ones(1, self.mediumshotRange[1] - self.mediumshotRange[0]))
-        self.lowshotBias = nn.Parameter(torch.ones(1, self.lowshotRange[1] - self.lowshotRange[0]))
+        self.fewshotBias = nn.Parameter(torch.ones(1, self.fewshotRange[1] - self.fewshotRange[0]))
 
-        self.manyshotClassMask, self.mediumshotClassMask, self.lowshotClassMask = manyshotClassMask, mediumshotClassMask, lowshotClassMask
+        self.manyshotClassMask, self.mediumshotClassMask, self.fewshotClassMask = manyshotClassMask, mediumshotClassMask, fewshotClassMask
     
     def forward(self, x, *args):
         
         # slicing logits
         manyshotLogits = x[:,self.manyshotRange[0]:self.manyshotRange[1]]
         mediumshotLogits = x[:,self.mediumshotRange[0]:self.mediumshotRange[1]]
-        lowshotLogits = x[:,self.lowshotRange[0]:self.lowshotRange[1]]
+        fewshotLogits = x[:,self.fewshotRange[0]:self.fewshotRange[1]]
         
         # per index temperature scaling, bias, and softmax    
         manyshotProbs = F.softmax((self.manyshotTemp * manyshotLogits) + self.manyshotBias, dim=1)[:,:-1]
         mediumshotProbs = F.softmax((self.mediumshotTemp * mediumshotLogits) + self.mediumshotBias, dim=1)[:,:-1]
-        lowshotProbs = F.softmax((self.lowshotTemp * lowshotLogits) + self.lowshotBias, dim=1)[:,:-1]
+        fewshotProbs = F.softmax((self.fewshotTemp * fewshotLogits) + self.fewshotBias, dim=1)[:,:-1]
         
         # concatenating, normalising, and taking log (loss function is NLL)    
         y = Variable(torch.zeros(x.shape[0], x.shape[1]-3), requires_grad=True).cuda()     # removing reject option indices
         y[:,self.manyshotClassMask] = manyshotProbs
         y[:,self.mediumshotClassMask] = mediumshotProbs
-        y[:,self.lowshotClassMask] = lowshotProbs
+        y[:,self.fewshotClassMask] = fewshotProbs
         y = y / y.sum(dim=1).unsqueeze(1)
         y = torch.log(y)
 
@@ -55,7 +55,7 @@ class CalibrateExperts(nn.Module):
 class DotProduct_Classifier(nn.Module):
 
     def __init__(self, num_classes=1000, feat_dim=512, use_logits=False, *args):
-        super(My_DotProduct_Classifier, self).__init__()
+        super(DotProduct_Classifier, self).__init__()
         self.num_classes = num_classes
         self.feat_dim = feat_dim
         self.fc = nn.Linear(feat_dim, num_classes)
@@ -63,7 +63,7 @@ class DotProduct_Classifier(nn.Module):
 
     def forward(self, x, *args):
         x = self.fc(x)
-        if( not self.use_logits )        
+        if( not self.use_logits ):        
             x = F.log_softmax(x, dim=1)                                  
         return x
 
@@ -165,7 +165,6 @@ class ResNet(nn.Module):
         self.use_dropout = True if dropout else False
 
         if self.use_fc:
-            print('Using fc.')
             self.fc_add = nn.Linear(512*block.expansion, 512)
 
         if self.use_dropout:
@@ -233,7 +232,7 @@ def create_model_resnet152(use_fc=True, dropout=None, dataset=None, caffe=False,
     if caffe:
         print('Loading Caffe Pretrained ResNet 152 Weights.')
         resnet152 = init_weights(model=resnet152,
-                                 weights_path='/BS/deepThought/work/cvpr-19/OpenLongTailRecognition-OLTR/logs/caffe_resnet152.pth',
+                                 weights_path='./data/caffe_resnet152.pth',
                                  caffe=True)
     return resnet152
 

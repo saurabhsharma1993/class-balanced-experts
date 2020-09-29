@@ -34,9 +34,6 @@ def gen_logits( args, feature_extractor, classifier, device, loader ):
     with torch.no_grad():
         for ind, (data, target, _,  train_count ) in enumerate(loader):
 
-            # print('Doing something.')
-            sys.stdout.flush()
-
             data, target = data.to(device), target.to(device)
             features, _ = feature_extractor(data)
             logits = classifier(features)  
@@ -46,8 +43,6 @@ def gen_logits( args, feature_extractor, classifier, device, loader ):
 
             if (ind % args.log_interval == 0):
                 print('Progress: {:.2f}%'.format( 100 * (ind + 1) * data.shape[0] / len(loader.dataset) ) )
-
-            # break
 
     return total_logits, total_labels
 
@@ -63,7 +58,7 @@ def main():
     parser.add_argument('--exp', type=str, default='default', metavar='N', help='name of experiment')
     parser.add_argument('--epochs', type=int, default=30, metavar='N', help='number of epochs to train (default: 10)')
     parser.add_argument('--load_model', type=str, default=None, help='model to initialise from')
-    parser.add_argument('--model_name', type=str, default=None, help='name of model : manyshot | mediumshot | lowshot | general')
+    parser.add_argument('--model_name', type=str, default=None, help='name of model : manyshot | mediumshot | fewshot | general')
     parser.add_argument('--data_split', type=str, default=None, help='train | val | test_aligned')
     parser.add_argument('--caffe', action='store_true', default=False, help='caffe pretrained model')
     parser.add_argument('--test', action='store_true', default=False, help='run in test mode')
@@ -73,7 +68,7 @@ def main():
     parser.add_argument('--stopping_criterion', type=int, default=30, metavar='N',)
     parser.add_argument('--low_threshold', type=int, default=0, metavar='N', )
     parser.add_argument('--high_threshold', type=int, default=100000, metavar='N', )
-    parser.add_argument('--picker', type=str, default='generalist', help='dataloader or model picker - experts | generalist : experts uses manyshot, medianshot, lowshot partitioning; \
+    parser.add_argument('--picker', type=str, default='generalist', help='dataloader or model picker - experts | generalist : experts uses manyshot, mediumshot, fewshot partitioning; \
                                                                     generalist uses the generalist model', )
 
     args = parser.parse_args()
@@ -83,7 +78,6 @@ def main():
     print("==========================================\n")
 
     use_cuda = not args.no_cuda and torch.cuda.is_available()
-    # torch.manual_seed(args.seed)
     # make everything deterministic, reproducible
     if (args.seed is not None):
         print('Seeding everything with seed {}.'.format(args.seed))
@@ -99,7 +93,6 @@ def main():
 
     kwargs = {'num_workers': 1, 'pin_memory': True} if use_cuda else {}
 
-    # batch size settings : note that these are important for memory and performance reasons
     if(args.dataset.lower()=='imagenet' ):
         args.batch_size = 256
     elif (args.dataset.lower() == 'places' ):
@@ -109,31 +102,29 @@ def main():
     ######################## load data and pre-trained models ##############
     ########################################################################
 
-    # all loaders must have shuffle false so that data is aligned across different models !!!!
-
+    # all loaders must have shuffle false so that data is aligned across different models
     print('Loading train loader.')
     train_loader = torch.utils.data.DataLoader( Threshold_Dataset(root=data_root[args.dataset], orig_txt='./data/{}_LT/{}_LT_train.txt'.format(args.dataset, args.dataset), txt='./data/{}_LT/{}_LT_train.txt'.format(args.dataset, args.dataset ),
-                                                             use_open = False, transform=data_transforms['train'], picker='experts', sampling=args.sampling ), batch_size = args.batch_size, shuffle = False, **kwargs )
+                                                             use_open = False, transform=data_transforms['train'], picker='experts'), batch_size = args.batch_size, shuffle = False, **kwargs )
     
     print('Loading val loader.')
     val_loader = torch.utils.data.DataLoader( Threshold_Dataset(root=data_root[args.dataset], orig_txt='./data/{}_LT/{}_LT_train.txt'.format(args.dataset, args.dataset), txt='./data/{}_LT/{}_LT_val.txt'.format(args.dataset, args.dataset),
-                      use_open=False, transform=data_transforms['val'], picker='experts', sampling=args.sampling), batch_size=args.batch_size, shuffle=False, **kwargs )
+                      use_open=False, transform=data_transforms['val'], picker='experts'), batch_size=args.batch_size, shuffle=False, **kwargs )
 
     print('Loading test loader.')
     test_loader = torch.utils.data.DataLoader( Threshold_Dataset(root=data_root[args.dataset], orig_txt='./data/{}_LT/{}_LT_train.txt'.format(args.dataset, args.dataset), txt='./data/{}_LT/{}_LT_test.txt'.format(args.dataset, args.dataset),
-                      use_open=False, transform=data_transforms['test'], picker='experts', sampling=args.sampling), batch_size=args.batch_size, shuffle=False, **kwargs )
+                      use_open=False, transform=data_transforms['test'], picker='experts'), batch_size=args.batch_size, shuffle=False, **kwargs )
   
     # using many/medium/few shot loaders for test sets for reporting metrics
-
-    print('Loading test loader many shot.')
+    print('Loading test loader manyshot.')
     test_loader_manyshot = torch.utils.data.DataLoader( Threshold_Dataset(root=data_root[args.dataset], orig_txt='./data/{}_LT/{}_LT_train.txt'.format(args.dataset, args.dataset), txt='./data/{}_LT/{}_LT_test.txt'.format(args.dataset, args.dataset),
                                                                        low_threshold = 100, use_open = False, transform=data_transforms['test'], picker='experts' ), batch_size=args.batch_size, shuffle=False, **kwargs )
 
-    print('Loading test loader medium shot.')
+    print('Loading test loader mediumshot.')
     test_loader_mediumshot = torch.utils.data.DataLoader( Threshold_Dataset(root=data_root[args.dataset], orig_txt='./data/{}_LT/{}_LT_train.txt'.format(args.dataset, args.dataset), txt='./data/{}_LT/{}_LT_test.txt'.format(args.dataset, args.dataset),
                                                                        low_threshold = 20, high_threshold = 100, use_open = False, transform=data_transforms['test'], picker='experts' ), batch_size=args.batch_size, shuffle=False, **kwargs )
 
-    print('Loading test loader low shot.')
+    print('Loading test loader fewshot.')
     test_loader_fewshot = torch.utils.data.DataLoader( Threshold_Dataset(root=data_root[args.dataset], orig_txt='./data/{}_LT/{}_LT_train.txt'.format(args.dataset, args.dataset), txt='./data/{}_LT/{}_LT_test.txt'.format(args.dataset, args.dataset),
                                                                        high_threshold= 20, use_open = False, transform=data_transforms['test'], picker='experts' ), batch_size=args.batch_size, shuffle=False, **kwargs )
 
@@ -143,7 +134,7 @@ def main():
         class_mask = test_loader_manyshot.dataset.class_mask
     elif (args.model_name == 'mediumshot'):
         class_mask = test_loader_mediumshot.dataset.class_mask
-    elif (args.model_name == 'lowshot'):
+    elif (args.model_name == 'fewshot'):
         class_mask = test_loader_fewshot.dataset.class_mask
     elif (args.model_name == 'general'):
         class_mask = torch.BoolTensor( [ True for i in range(tot_num_classes) ] )
@@ -185,13 +176,13 @@ def main():
     
     results = {}
     if( args.data_split=='train' ):
-        logits, labels = gen_logits(args, feature_extractor, classifier, device, train_loader))
+        logits, labels = gen_logits(args, feature_extractor, classifier, device, train_loader)
     if( args.data_split=='val' ):
-        logits, labels = gen_logits(args, feature_extractor, classifier, device, val_loader))
+        logits, labels = gen_logits(args, feature_extractor, classifier, device, val_loader)
     if( args.data_split=='test_aligned' ):
-        manyshot_logits, manyshot_labels = gen_logits(args, feature_extractor, classifier, device, test_loader))
-        mediumshot_logits, mediumshot_labels = gen_logits(args, feature_extractor, classifier, device, test_loader))
-        fewshot_logits, fewshot_labels = gen_logits(args, feature_extractor, classifier, device, test_loader))
+        manyshot_logits, manyshot_labels = gen_logits(args, feature_extractor, classifier, device, test_loader)
+        mediumshot_logits, mediumshot_labels = gen_logits(args, feature_extractor, classifier, device, test_loader)
+        fewshot_logits, fewshot_labels = gen_logits(args, feature_extractor, classifier, device, test_loader)
         logits = torch.cat((manyshot_logits, mediumshot_logits, fewshot_logits), dim=0)     
         labels = torch.cat((manyshot_labels, mediumshot_labels, fewshot_labels), dim=0)
     else:

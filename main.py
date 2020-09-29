@@ -9,7 +9,7 @@ from torchvision import datasets, transforms
 import pickle
 import os
 from pprint import pprint
-from utils import data_root, plot_curves, seed_everything, min_kldiv, plot_confusion_matrix, find_avg_scores, set_weights
+from utils import data_root, plot_curves, seed_everything, set_weights
 from itertools import chain
 import copy
 import matplotlib.pyplot as plt
@@ -119,7 +119,7 @@ def main():
     parser.add_argument('--low_threshold', type=int, default=0, metavar='N', )
     parser.add_argument('--high_threshold', type=int, default=100000, metavar='N', )
     parser.add_argument('--open_ratio', type=int, default=1, help='ratio of closed_set to open_set data', )
-    parser.add_argument('--picker', type=str, default='generalist', help='dataloader or model picker - experts | generalist : experts uses manyshot, medianshot, lowshot partitioning; \
+    parser.add_argument('--picker', type=str, default='generalist', help='dataloader or model picker - experts | generalist : experts uses manyshot, medianshot, fewshot partitioning; \
                                                                     generalist uses the generalist model', )
     parser.add_argument('--num_learnable', type=int, default='-1', help='number of learnable layers : -1 ( all ) | 1 ( only classifier ) | 2 ( classifier and last fc ) | 3 - 6 ( classifier, fc + $ind - 2$ resnet super-blocks ) ')
     parser.add_argument('--scheduler', type=str, default='stepLR', help=' stepLR | cosine lr scheduler')
@@ -132,9 +132,8 @@ def main():
     print("==========================================\n")
 
     use_cuda = not args.no_cuda and torch.cuda.is_available()
-    # torch.manual_seed(args.seed)
-    # make everything deterministic
     
+    # make everything deterministic
     if (args.seed is not None):
         print('Seeding everything with seed {}.'.format(args.seed))
         seed_everything(args.seed)
@@ -185,7 +184,7 @@ def main():
     optimizer = torch.optim.SGD(chain(feature_extractor.parameters(),classifier.parameters()),lr=args.lr, momentum= args.momentum, weight_decay=args.weight_decay)
     
     if(args.scheduler == 'stepLR'):
-        scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma=args.gamma) # high learning rate decay, useful or not ?
+        scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma=args.gamma) 
         print( 'Using StepLR scheduler with params, stepsize : {}, gamma : {}'.format( args.step_size, args.gamma ) )
     elif(args.scheduler == 'cosine'):
         scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max = args.max_epochs ) 
@@ -269,14 +268,14 @@ def main():
         results['train_accuracies'] = []
         results['test_losses'] = []
         results['test_accuracies'] = []
-        best_acc, best_epoch = 0,0
+        best_acc, best_epoch = -0.1,0
 
         epoch = 1
-        while(True): # use for early stopping
+        while(True): 
 
             sys.stdout.flush()
             train_loss, train_err = train(args, feature_extractor, classifier, device, train_loader, optimizer, scheduler, epoch )
-            test_loss, test_err = test(args, feature_extractor, classifier, device, val_loader) # validation must be done on the validation set !!!!!!!
+            test_loss, test_err = test(args, feature_extractor, classifier, device, val_loader) 
 
             results['train_losses'].append(train_loss)
             results['test_losses'].append(test_loss)
@@ -300,18 +299,18 @@ def main():
 
             elif (epoch > best_epoch + args.stopping_criterion):
                 print('Best model obtained. Error : ', best_acc)
-                plot_curves(results,exp_dir) # plot
+                plot_curves(results,exp_dir) 
                 break
 
             elif ( args.scheduler == 'cosine' and epoch == args.max_epochs):
                 print('Best model obtained. Error : ', best_acc)
-                plot_curves(results,exp_dir) # plot
+                plot_curves(results,exp_dir) 
                 break
 
             savepath = os.path.join(exp_dir, 'results.pickle')
             with open(savepath, 'wb') as f:
                 pickle.dump(results, f)
-            plot_curves(results,exp_dir) # plot
+            plot_curves(results,exp_dir) 
             epoch = epoch + 1
 
 if __name__ == '__main__':

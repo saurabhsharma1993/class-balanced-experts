@@ -4,14 +4,14 @@ from torch import nn, optim
 import torch.nn as nn
 from torch.nn import functional as F
 import argparse
-from data.dataloader import Calibration_Dataset
+from dataloader import Calibration_Dataset
 from pprint import pprint
 from utils import plot_curves, seed_everything, weights_init
 import os
 import sys
 import copy
 import pickle
-from models.DotProductClassifier import CalibrateExperts
+from models import CalibrateExperts
 import matplotlib
 import matplotlib.pyplot as plt
 
@@ -27,7 +27,7 @@ def train(args, model, device, dataloader, optimizer, scheduler, epoch):
     labels = torch.from_numpy(dataloader.dataset.labels).long()
     batch_size = dataloader.batch_size
 
-    for batch_idx, (data, target, _) in enumerate(dataloader):
+    for batch_idx, (data, target) in enumerate(dataloader):
 
         sys.stdout.flush()
 
@@ -66,7 +66,7 @@ def test(args, model, device, dataloader):
     criterion = nn.NLLLoss().cuda()
     total_preds = torch.empty((0), dtype=torch.long).to(device)
 
-    for batch_idx, (data, target, _) in enumerate(dataloader):
+    for batch_idx, (data, target) in enumerate(dataloader):
 
         sys.stdout.flush()
 
@@ -100,15 +100,16 @@ def main():
     parser.add_argument('--dataset', type=str, default='ImageNet', metavar='N', help='dataset to run experiments on')
     parser.add_argument('--batch_size', type=int, default=256, metavar='N', help='input batch size for training (default: 256; note that batch_size 64 gives worse performance for imagenet, so don\'t change this. )')
     parser.add_argument('--exp', type=str, default='default', metavar='N', help='name of experiment')
+    parser.add_argument('--logits_exp', type=str, default='default', metavar='N', help='name of experiment containing logits')
     parser.add_argument('--no-cuda', action='store_true', default=False, help='disables CUDA training')
     parser.add_argument('--seed', type=int, default=5021, metavar='S', help='random seed (default: 5021)')
     parser.add_argument('--lr', type=float, default=0.1, metavar='LR', help='learning rate (default: 0.01)')
     parser.add_argument('--weight_decay', type=float, default=5*1e-4, help='weight_decay (default: 1e-5)')
     parser.add_argument('--momentum', type=float, default=0.9, metavar='M', help='SGD momentum (default: 0.5)')
-    parser.add_argument('--step_size', type=float, default=200, metavar='M', help='SGD momentum (default: 0.5)')
+    parser.add_argument('--step_size', type=float, default=30, metavar='M', help='SGD momentum (default: 0.5)')
     parser.add_argument('--gamma', type=float, default=0.1, metavar='M', help='SGD momentum (default: 0.5)')
     parser.add_argument('--log-interval', type=int, default=10, metavar='N',help='how many batches to wait before logging training status')
-    parser.add_argument('--stopping_criterion', type=int, default=40, metavar='N',)
+    parser.add_argument('--stopping_criterion', type=int, default=30, metavar='N',)
     parser.add_argument('--test', action='store_true', default=False, help='test mode')
     parser.add_argument('--load_model', type=str, default=None, help='model to initialise from')
 
@@ -119,7 +120,6 @@ def main():
     print("==========================================\n")
 
     use_cuda = not args.no_cuda and torch.cuda.is_available()
-    # torch.manual_seed(args.seed)
     # make everything deterministic, reproducible
     if (args.seed is not None):
         print('Seeding everything with seed {}.'.format(args.seed))
@@ -141,56 +141,54 @@ def main():
     ########################         load data  		####################
     ########################################################################
     
-    datadir = '{}_features_and_logits_aligned'.format(dataset.lower())
+    datadir = './checkpoint/{}'.format(args.logits_exp)
 
     if (not args.test):
-        data_manyshot = torch.load('/BS/deepThought/work/cvpr-19/OpenLongTailRecognition-OLTR/checkpoint/{}/results_val_manyshot.pickle'.format(datadir))        # for experts with reject option
-        data_mediumshot = torch.load('/BS/deepThought/work/cvpr-19/OpenLongTailRecognition-OLTR/checkpoint/{}/results_val_mediumshot.pickle'.format(datadir))    # for experts with reject option
-        data_lowshot = torch.load('/BS/deepThought/work/cvpr-19/OpenLongTailRecognition-OLTR/checkpoint/{}/results_val_lowshot.pickle'.format(datadir))          # for experts with reject option
+        data_manyshot = torch.load('{}/results_val_manyshot.pickle'.format(datadir))        # for experts with reject option
+        data_mediumshot = torch.load('{}/results_val_mediumshot.pickle'.format(datadir))    # for experts with reject option
+        data_fewshot = torch.load('{}/results_val_fewshot.pickle'.format(datadir))          # for experts with reject option
 
     else:
-        data_manyshot = torch.load('/BS/deepThought/work/cvpr-19/OpenLongTailRecognition-OLTR/checkpoint/{}/results_test_aligned_manyshot.pickle'.format(datadir))        # for experts with reject option
-        data_mediumshot = torch.load('/BS/deepThought/work/cvpr-19/OpenLongTailRecognition-OLTR/checkpoint/{}/results_test_aligned_mediumshot.pickle'.format(datadir))    # for experts with reject option
-        data_lowshot = torch.load('/BS/deepThought/work/cvpr-19/OpenLongTailRecognition-OLTR/checkpoint/{}/results_test_aligned_lowshot.pickle'.format(datadir))          # for experts with reject option
-        data_general = torch.load('/BS/deepThought/work/cvpr-19/OpenLongTailRecognition-OLTR/checkpoint/{}_features_and_logprobs_aligned/results_test_aligned_general.pickle'.format(dataset.lower()))
+        data_manyshot = torch.load('{}/results_test_aligned_manyshot.pickle'.format(datadir))        # for experts with reject option
+        data_mediumshot = torch.load('{}/results_test_aligned_mediumshot.pickle'.format(datadir))    # for experts with reject option
+        data_fewshot = torch.load('{}/results_test_aligned_fewshot.pickle'.format(datadir))          # for experts with reject option
+        data_general = torch.load('{}/results_test_aligned_general.pickle'.format(dataset.lower()))
 
     manyshot_logits = data_manyshot['logits'].clone().detach()
     mediumshot_logits = data_mediumshot['logits'].clone().detach()
-    lowshot_logits = data_lowshot['logits'].clone().detach()
+    fewshot_logits = data_fewshot['logits'].clone().detach()
     labels = data_manyshot['labels'] if not args.test else data_general['labels']
 
-    manyshotClassMask, mediumshotClassMask, lowshotClassMask = data_manyshot['class_mask'], data_mediumshot['class_mask'], data_lowshot['class_mask']        
+    manyshotClassMask, mediumshotClassMask, fewshotClassMask = data_manyshot['class_mask'], data_mediumshot['class_mask'], data_fewshot['class_mask']        
    
-    # logit tuning for experts with reject option
+    # logit tuning to correct for open set sampling ratio
     if(dataset.lower()=='imagenet'):
         manyshot_logits[:, -1] = manyshot_logits[:, -1]  - np.log(2/ (1+16))
         mediumshot_logits[:, -1] = mediumshot_logits[:, -1]  - np.log(2/ (1+16))
-        lowshot_logits[:, -1] = lowshot_logits[:, -1]  - np.log(2/ (1+16))
+        fewshot_logits[:, -1] = fewshot_logits[:, -1]  - np.log(2/ (1+16))
     
     else:
         manyshot_logits[:, -1] = manyshot_logits[:, -1]  - np.log(2/ (1+16))
         mediumshot_logits[:, -1] = mediumshot_logits[:, -1]  - np.log(2/ (1+8))
-        lowshot_logits[:, -1] = lowshot_logits[:, -1]  - np.log(2/ (1+8))
+        fewshot_logits[:, -1] = fewshot_logits[:, -1]  - np.log(2/ (1+8))
     
     manyshot_features = manyshot_logits.data.cpu().numpy()                                        
     mediumshot_features = mediumshot_logits.data.cpu().numpy()
-    lowshot_features = lowshot_logits.data.cpu().numpy()
+    fewshot_features = fewshot_logits.data.cpu().numpy()
     labels = labels.data.cpu().numpy()
        
     if(not args.test):
-        # calibration only on experts
         train_loader = torch.utils.data.DataLoader(Calibration_Dataset(orig_txt='./data/{}_LT/{}_LT_train.txt'.format(args.dataset, args.dataset), manyshot_features=manyshot_features, mediumshot_features=mediumshot_features,
-                                       lowshot_features=lowshot_features, labels=labels), batch_size=args.batch_size, shuffle=True, **kwargs)
+                                       fewshot_features=fewshot_features, labels=labels), batch_size=args.batch_size, shuffle=True, **kwargs)
     else:
-        # calibration only on experts
         test_loader = torch.utils.data.DataLoader(Calibration_Dataset(orig_txt='./data/{}_LT/{}_LT_train.txt'.format(args.dataset, args.dataset), manyshot_features=manyshot_features, mediumshot_features=mediumshot_features,
-                                       lowshot_features=lowshot_features, labels=labels), batch_size=args.batch_size, shuffle=False, **kwargs)         # dont shuffle test set as usual
+                                       fewshot_features=fewshot_features, labels=labels), batch_size=args.batch_size, shuffle=False, **kwargs)         # dont shuffle test set as usual
        
     ########################################################################
     ######################## initialise model and optimizer ################
     ########################################################################
 
-    model = CalibrateExperts(args.dataset.lower(), manyshotClassMask, mediumshotClassMask, lowshotClassMask, use_all = args.use_all).cuda()
+    model = CalibrateExperts(args.dataset.lower(), manyshotClassMask, mediumshotClassMask, fewshotClassMask).cuda()
     optimizer = torch.optim.SGD(model.parameters() ,lr=args.lr, momentum= args.momentum, weight_decay=args.weight_decay)
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma=args.gamma)
     print( 'Using StepLR scheduler with params, stepsize : {}, gamma : {}'.format( args.step_size, args.gamma ) )
@@ -213,7 +211,7 @@ def main():
         best_acc, best_epoch = 0, 0
 
         epoch = 1
-        while (True):  # use for early stopping
+        while (True): 
 
             sys.stdout.flush()
 
@@ -256,11 +254,12 @@ def main():
         loss, acc, preds = test(args, model, device, test_loader)
         
         if(dataset=='ImageNet'):
-            split_ranges = {'manyshot' : [0, 19550], 'medianshot' : [19550, 43200], 'lowshot' : [43200,50000], 'all' : [0, 50000]} # imagenet
+            split_ranges = {'manyshot' : [0, 19550], 'medianshot' : [19550, 43200], 'fewshot' : [43200,50000], 'all' : [0, 50000]} # imagenet
         else:
-            split_ranges = {'manyshot' : [0, 13200], 'medianshot' : [13200, 29400], 'lowshot' : [29400,36500], 'all' : [0, 36500]} # places
+            split_ranges = {'manyshot' : [0, 13200], 'medianshot' : [13200, 29400], 'fewshot' : [29400,36500], 'all' : [0, 36500]} # places
         
         for split_name, split_range in split_ranges.items():
+            
             gt_target = torch.from_numpy(labels[int(split_range[0]):int(split_range[1])]).cuda()
             split_preds = preds[int(split_range[0]):int(split_range[1])]
 

@@ -115,7 +115,7 @@ class Threshold_Dataset(Dataset):
 
 class Calibration_Dataset(Dataset):
 
-    def __init__(self, orig_txt, manyshot_features, mediumshot_features, lowshot_features, labels = None):
+    def __init__(self, orig_txt, manyshot_features, mediumshot_features, fewshot_features, labels = None):
 
         # loading train file ( from orig_txt )
         self.orig_labels = []
@@ -130,11 +130,11 @@ class Calibration_Dataset(Dataset):
         for l in np.unique(self.orig_labels):
             self.train_class_count[l] = len(self.orig_labels[self.orig_labels == l])
 
-        self.manyshot_features, self.mediumshot_features, self.lowshot_features = manyshot_features, mediumshot_features, lowshot_features
+        self.manyshot_features, self.mediumshot_features, self.fewshot_features = manyshot_features, mediumshot_features, fewshot_features
         self.labels = labels
-        self.features = np.concatenate((self.manyshot_features, self.mediumshot_features, self.lowshot_features), axis=1)                                                                                          # concatenating features from the three experts
+        self.features = np.concatenate((self.manyshot_features, self.mediumshot_features, self.fewshot_features), axis=1)                                                                                          # concatenating features from the three experts
        
-        print('Created dataset: {:d} manyshot samples, {:d} mediumshot samples, {:d} lowshot samples. Size of features: {:d}'.format((self.expertLabels==0).sum(), (self.expertLabels==1).sum(), (self.expertLabels==2).sum(), self.features.shape[1]))
+        print('Created dataset with {:d} samples.'.format(len(self.features)))
 
     def __len__(self):
         return len(self.labels)
