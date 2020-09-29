@@ -2,7 +2,7 @@
 
 Code for our GCPR 20 Paper: Long-Tailed Recognition Using Class-Balanced Experts, available here: https://arxiv.org/abs/2004.03706
 
-![Teaser Image](https://github.com/ssfootball04/class-balanced_experts/blob/master/Teaser.png)
+![Teaser Image](Teaser.png)
 
 ## Dependencies
 * python 3.7
