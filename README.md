@@ -54,11 +54,8 @@ Test the joint calibration module to generate four-fold accuracies on Many/Mediu
 python jointCalibration.py --exp [imagenet_jointCalibration_exp] --dataset Imagenet --test --load_model ./checkpoint/imagenet_jointCalibration_exp/best_model.pt
 python jointCalibration.py --exp [places_jointCalibration_exp] --dataset Places --test --load_model ./checkpoint/places_jointCalibration_exp/best_model.pt
 ```
-## Pre-trained model
 
-We provide pre-trained expert and jointCalibration models on [Google Drive](https://drive.google.com/file/d/1m6bVVms1Q54AbxrG_EE8vvzDVFVQ-JgO/view?usp=sharing). You can reproduce our results by generating the logit scores using the expert models, and evaluating using the jointCalibration model. 
-
-## Code 
+## Code References 
 
 The code for the base ResNet models is taken from this repository for Liu et al's CVPR 19 paper Large-Scale Long-Tailed Recognition in an Open World: https://github.com/zhmiao/OpenLongTailRecognition-OLTR. 
 
