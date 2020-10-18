@@ -1,6 +1,7 @@
 ## class-balanced-experts
 
-Code for our GCPR 20 Paper: [Long-Tailed Recognition Using Class-Balanced Experts](https://arxiv.org/abs/2004.03706). 
+Code for our GCPR 20 Paper: [Long-Tailed Recognition Using Class-Balanced Experts](https://arxiv.org/abs/2004.03706).
+
 Video: https://www.youtube.com/watch?v=1rxMDoIm6oM&feature=youtu.be&t=29m58s
 
 ![Teaser Image](Teaser.png)
